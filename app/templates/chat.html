@@ -1,0 +1,156 @@
+{% extends 'base.html' %}
+{% block title %}Chat · TalkingPDF{% endblock %}
+{% block content %}
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <div class="toast-container" aria-live="polite" aria-atomic="true">
+        {% for message in messages %}
+          <div class="toast">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="workspace">
+    <div class="doc-pane">
+      <div class="panel doc-header">
+        <h2>Document</h2>
+        <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data" class="upload-form">
+          <input type="file" name="pdf" accept="application/pdf" required>
+          <button class="button" type="submit">Upload</button>
+        </form>
+      </div>
+      <div class="panel doc-body">
+        {% if pdf_url %}
+          <iframe class="pdf-viewer" src="{{ pdf_url }}#toolbar=0" title="PDF preview"></iframe>
+        {% else %}
+          <div class="placeholder">Upload a PDF to preview it here.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="chat-pane">
+      <div class="panel suggestions">
+        <div class="sugg-title">Suggested questions:</div>
+        <div class="sugg-grid">
+          {% for s in suggestions %}
+          <button class="sugg-card" type="button" data-suggest="{{ s }}">{{ s }}</button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <section id="chat" class="chat">
+        {% for i in range(past|length) %}
+          <div class="chat-row chat-user">
+            <div class="avatar">You</div>
+            <div class="bubble">{{ past[i] }}</div>
+          </div>
+          {% if generated_html|length > i %}
+          <div class="chat-row chat-bot">
+            <div class="avatar">AI</div>
+            <div class="bubble markdown">{{ generated_html[i]|safe }}</div>
+          </div>
+          {% endif %}
+        {% endfor %}
+      </section>
+
+      <form id="ask-form" class="ask-bar">
+        <input id="question" type="text" name="question" placeholder="Hey! Ask me anything about your PDF." required>
+        <button class="button button-primary" type="submit">Send</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // Auto-dismiss toasts after 3 seconds
+    setTimeout(() => {
+      document.querySelectorAll('.toast').forEach(t => t.classList.add('hide'));
+      setTimeout(() => {
+        const cont = document.querySelector('.toast-container');
+        if(cont) cont.remove();
+      }, 400);
+    }, 3000);
+    const chatEl = document.getElementById('chat');
+    const form = document.getElementById('ask-form');
+    const input = document.getElementById('question');
+    const apiAskUrl = "{{ url_for('api_ask') }}";
+
+    function appendUser(q){
+      const row = document.createElement('div');
+      row.className = 'chat-row chat-user';
+      row.innerHTML = '<div class="avatar">You</div><div class="bubble"></div>';
+      row.querySelector('.bubble').textContent = q;
+      chatEl.appendChild(row);
+      chatEl.scrollTop = chatEl.scrollHeight;
+    }
+
+    function appendThinking(){
+      const row = document.createElement('div');
+      row.className = 'chat-row chat-bot thinking';
+      row.innerHTML = '<div class="avatar">AI</div><div class="bubble"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>';
+      chatEl.appendChild(row);
+      chatEl.dataset.thinkingId = Date.now().toString();
+      row.id = 'thinking-' + chatEl.dataset.thinkingId;
+      chatEl.scrollTop = chatEl.scrollHeight;
+    }
+
+    function replaceThinkingWithAnswer(html){
+      const id = chatEl.dataset.thinkingId;
+      const row = document.getElementById('thinking-' + id);
+      if(row){
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble markdown appear';
+        bubble.innerHTML = html;
+        row.classList.remove('thinking');
+        row.querySelector('.bubble').replaceWith(bubble);
+      } else {
+        const fallback = document.createElement('div');
+        fallback.className = 'chat-row chat-bot';
+        fallback.innerHTML = '<div class="avatar">AI</div><div class="bubble markdown appear"></div>';
+        fallback.querySelector('.bubble').innerHTML = html;
+        chatEl.appendChild(fallback);
+      }
+      chatEl.scrollTop = chatEl.scrollHeight;
+    }
+
+    function appendAI(html){
+      const row = document.createElement('div');
+      row.className = 'chat-row chat-bot';
+      row.innerHTML = '<div class="avatar">AI</div><div class="bubble markdown appear"></div>';
+      row.querySelector('.bubble').innerHTML = html;
+      chatEl.appendChild(row);
+      chatEl.scrollTop = chatEl.scrollHeight;
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const q = input.value.trim();
+      if(!q) return;
+      appendUser(q);
+      input.value='';
+      try{
+        appendThinking();
+        const res = await fetch(apiAskUrl, {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({question: q})
+        });
+        const data = await res.json();
+        if(!res.ok){
+          replaceThinkingWithAnswer('<em>' + (data.error || 'Error') + '</em>');
+        } else {
+          replaceThinkingWithAnswer(data.answer);
+        }
+      }catch(err){
+        replaceThinkingWithAnswer('<em>Network error. Please try again.</em>');
+      }
+    });
+
+    document.querySelectorAll('[data-suggest]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        input.value = btn.getAttribute('data-suggest');
+        input.focus();
+      });
+    });
+  </script>
+{% endblock %} 

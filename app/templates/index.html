@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}TalkingPDF · Chat with your PDF{% endblock %}
+{% block content %}
+<section class="hero">
+  <div class="hero-content">
+    <h1>Chat with your PDF</h1>
+    <p>Upload any PDF and ask questions. Get instant answers grounded in your document.</p>
+    <div class="cta">
+      <a class="button button-primary button-lg" href="{{ url_for('chat') }}">Get Started</a>
+    </div>
+  </div>
+  <div class="hero-art"></div>
+</section>
+{% endblock %} 
